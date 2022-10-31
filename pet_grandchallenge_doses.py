@@ -1,3 +1,4 @@
+import time
 import glob
 import matplotlib.pyplot as plt
 from pydicom import dcmread
@@ -178,7 +179,7 @@ print(len(dose150))
 
 
 
-shape = (256, 256)
+shape = (512, 512)
 params = {
         'maxit': 200,
         'tol': 10e-15,
@@ -216,24 +217,51 @@ filtered = [fn for fn in all_images
 
 
 for test_files in filtered:
-    test_image=nib.load(test_files).get_fdata()
-    u, s, vh = np.linalg.svd(test_image, full_matrices=False)
-    
-    wavelet_smoothed = denoise_wavelet(test_image, multichannel=False,
-                           method='BayesShrink', mode='soft',
+   # test_image=nib.load(test_files).get_fdata()
+    test_image=nib.load(test_files)
+    print(test_image.header)
+
+    print(test_image.get_fdata().shape)
+
+    img_data = test_image.get_fdata()
+
+    for i in range(len(img_data[:])):
+        im_us, mask = apply_random_mask(img_data[i], params['rate'])
+        indices = np.nonzero(mask.flatten())[0]
+        params['lambda'] = .01
+        #indices=[1,4,5]
+        wavelet_smoothed = denoise_wavelet(img_data[i], multichannel=False,
+                         method='BayesShrink', mode='soft',
                            rescale_sigma=True,wavelet='db2')
+        
+        img_denoised = denoise_tv_chambolle(wavelet_smoothed, weight=0.2, multichannel=False)
+     #   print(img_denoised.shape)
+      #  reconstruction_tv = reconstructTV(img_denoised, indices, FISTA, params)[0]
+        img_data[i]=img_denoised
+   # u, s, vh = np.linalg.svd(test_image, full_matrices=False)
+    
+    #wavelet_smoothed = denoise_wavelet(test_image, multichannel=False,
+     #                      method='BayesShrink', mode='soft',
+      #                     rescale_sigma=True,wavelet='db2')
 
 
-    img_denoised = denoise_tv_chambolle(wavelet_smoothed, weight=3, multichannel=False)
-    noise_psnr = peak_signal_noise_ratio(test_image, img_denoised, data_range=1.0)
-    print("PSNR of input noisy image = ", noise_psnr)
-    plt.imshow(img_denoised[img_denoised.shape[0]//2])
-    plt.savefig('books_read.png')
-    #denoise_TV = test_image
-    img = nib.Nifti1Image(img_denoised, np.eye(4))
+   # img_denoised = denoise_tv_chambolle(wavelet_smoothed, weight=0.2, multichannel=False)
+    #noise_psnr = peak_signal_noise_ratio(test_image, img_denoised, data_range=1.0)
+
+  #  params['lambda'] = 10
+   # indices=[1,4,5]
+    #reconstruction_tv = reconstructTV(img_denoised, indices, FISTA, params)[0]
+   # noise_psnr2 = peak_signal_noise_ratio(test_image, reconstruction_tv, data_range=1.0)
+    #print("PSNR of input noisy image = ", noise_psnr)
+   # print("PSNR of input noisy image = ", noise_psnr2)
+    #img = nib.Nifti1Image(img_denoised, np.eye(4))
+    #img = nib.Nifti1Image(img_denoised, np.eye(4))
+    img = nib.Nifti1Image(img_data, test_image.affine)
+
     img.get_data_dtype() == np.dtype(np.int16)
     img.header.get_xyzt_units()
     nib.save(img, os.path.join(path[counter], "new"+files[counter])) 
     counter=counter+1
+    print("Completed:",counter)
 
 print("Closing")
